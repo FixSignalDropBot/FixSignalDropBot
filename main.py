@@ -6,14 +6,10 @@ import schedule
 from bs4 import BeautifulSoup
 import telebot
 
-# === Настройки ===
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "ТУК_СЛОЖИ_ТОКЕНА")
-bot = telebot.TeleBot(TOKEN)
+GROUP_CHAT_ID = os.getenv("TELEGRAM_GROUP_ID", "-1001234567890")  # замени с ID на групата
 
-# Списък с позволени чат ID
-ALLOWED_CHAT_IDS = [
-    123456789  # <-- замени с твоето реално ID (можеш да добавиш още)
-]
+bot = telebot.TeleBot(TOKEN)
 
 URL = "https://www.goaloo.mobi/1x2OddsDrop/"
 HEADERS = {
@@ -22,22 +18,6 @@ HEADERS = {
 
 last_sent = set()
 
-# === Команди за контрол ===
-@bot.message_handler(commands=['start'])
-def send_welcome(message):
-    if message.chat.id in ALLOWED_CHAT_IDS:
-        bot.reply_to(message, "Здравей, генерале! 🤖 Ботът е активен и чака сигнали.")
-
-@bot.message_handler(commands=['ping'])
-def handle_ping(message):
-    if message.chat.id in ALLOWED_CHAT_IDS:
-        bot.reply_to(message, "✅ Alive and operational, шефе.")
-
-@bot.message_handler(commands=['whoami'])
-def send_chat_id(message):
-    bot.reply_to(message, f"Твоето Chat ID е: `{message.chat.id}`", parse_mode="Markdown")
-
-# === Основна логика ===
 def fetch_html():
     response = requests.get(URL, headers=HEADERS)
     return response.text
@@ -48,7 +28,7 @@ def parse_odds_drops(html):
     matches = []
 
     if table:
-        rows = table.find_all('tr')[1:]
+        rows = table.find_all('tr')[1:]  # Пропускаме заглавния ред
         for row in rows:
             cols = row.find_all('td')
             if len(cols) >= 7:
@@ -61,7 +41,7 @@ def parse_odds_drops(html):
                 drop_pct = cols[6].text.strip()
 
                 try:
-                    pct = float(drop_pct.replace('%',''))
+                    pct = float(drop_pct.replace('%', ''))
                 except:
                     pct = 0
 
@@ -78,7 +58,6 @@ def parse_odds_drops(html):
                             'drop_pct': pct,
                             'id': match_id
                         })
-
     return matches
 
 def send_signals(signals):
@@ -88,11 +67,9 @@ def send_signals(signals):
         msg += f"\U0001F3C0 Мач: {match['teams']}\n"
         msg += f"\u23F0 Час: {match['time']}\n"
         msg += f"\u2193 Тип: {match['drop_type']}\n"
-        msg += f"\U0001F522 Спад: {match['odds_before']} ➔ {match['odds_after']} ({match['drop_pct']}%)"
+        msg += f"\U0001F522 Спад: {match['odds_before']} ➜ {match['odds_after']} ({match['drop_pct']}%)"
 
-        for chat_id in ALLOWED_CHAT_IDS:
-            bot.send_message(chat_id, msg, parse_mode='Markdown')
-
+        bot.send_message(GROUP_CHAT_ID, msg, parse_mode='Markdown')
         last_sent.add(match['id'])
 
 def job():
@@ -104,11 +81,18 @@ def job():
     else:
         print("Няма нови сигнали.")
 
-# === Автоматично стартиране ===
+# Ботът ще игнорира директни съобщения от непознати
+@bot.message_handler(func=lambda message: True)
+def ignore_direct_messages(message):
+    if str(message.chat.id) != GROUP_CHAT_ID:
+        print(f"❌ Игнориран достъп от {message.chat.id}")
+        return
+
+# Стартираме задачата през 5 минути
 schedule.every(5).minutes.do(job)
 
 if __name__ == "__main__":
-    print("Ботът е стартиран и работи...")
+    print("Ботът е стартиран и чака за сигнали...")
     job()
     while True:
         schedule.run_pending()
