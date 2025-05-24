@@ -6,22 +6,31 @@ import schedule
 from bs4 import BeautifulSoup
 import telebot
 
+# Получаваме токена и ID на чата от променливи на средата или директно
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "ТУК_СЛОЖИ_ТОКЕНА")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "ТУК_СЛОЖИ_ЧАТА")
+
+# Проверка за валидни данни
+if not TOKEN or not CHAT_ID:
+    print("❌ Липсва TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID!")
+    exit()
 
 bot = telebot.TeleBot(TOKEN)
 
 URL = "https://www.goaloo.mobi/1x2OddsDrop/"
-
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
 }
 
-last_sent = set()
+last_sent = set()  # За да не се дублират мачове
 
 def fetch_html():
-    response = requests.get(URL, headers=HEADERS)
-    return response.text
+    try:
+        response = requests.get(URL, headers=HEADERS, timeout=10)
+        return response.text
+    except Exception as e:
+        print(f"[ГРЕШКА] Проблем с достъп до сайта: {e}")
+        return ""
 
 def parse_odds_drops(html):
     soup = BeautifulSoup(html, 'html.parser')
@@ -42,7 +51,7 @@ def parse_odds_drops(html):
                 drop_pct = cols[6].text.strip()
 
                 try:
-                    pct = float(drop_pct.replace('%',''))
+                    pct = float(drop_pct.replace('%', ''))
                 except:
                     pct = 0
 
@@ -77,6 +86,9 @@ def send_signals(signals):
 def job():
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Сканирам за нови сигнали...")
     html = fetch_html()
+    if not html:
+        print("Не успях да заредя страницата.")
+        return
     signals = parse_odds_drops(html)
     if signals:
         send_signals(signals)
@@ -87,7 +99,7 @@ def job():
 schedule.every(5).minutes.do(job)
 
 if __name__ == "__main__":
-    print("Ботът е стартиран и работи...")
+    print("✅ Ботът е стартиран и работи...")
     job()
     while True:
         schedule.run_pending()
