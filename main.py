@@ -6,31 +6,41 @@ import schedule
 from bs4 import BeautifulSoup
 import telebot
 
-# Получаваме токена и ID на чата от променливи на средата или директно
+# === Настройки ===
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "ТУК_СЛОЖИ_ТОКЕНА")
-CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "ТУК_СЛОЖИ_ЧАТА")
-
-# Проверка за валидни данни
-if not TOKEN or not CHAT_ID:
-    print("❌ Липсва TELEGRAM_BOT_TOKEN или TELEGRAM_CHAT_ID!")
-    exit()
-
 bot = telebot.TeleBot(TOKEN)
+
+# Списък с позволени чат ID
+ALLOWED_CHAT_IDS = [
+    123456789  # <-- замени с твоето реално ID (можеш да добавиш още)
+]
 
 URL = "https://www.goaloo.mobi/1x2OddsDrop/"
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
 }
 
-last_sent = set()  # За да не се дублират мачове
+last_sent = set()
 
+# === Команди за контрол ===
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    if message.chat.id in ALLOWED_CHAT_IDS:
+        bot.reply_to(message, "Здравей, генерале! 🤖 Ботът е активен и чака сигнали.")
+
+@bot.message_handler(commands=['ping'])
+def handle_ping(message):
+    if message.chat.id in ALLOWED_CHAT_IDS:
+        bot.reply_to(message, "✅ Alive and operational, шефе.")
+
+@bot.message_handler(commands=['whoami'])
+def send_chat_id(message):
+    bot.reply_to(message, f"Твоето Chat ID е: `{message.chat.id}`", parse_mode="Markdown")
+
+# === Основна логика ===
 def fetch_html():
-    try:
-        response = requests.get(URL, headers=HEADERS, timeout=10)
-        return response.text
-    except Exception as e:
-        print(f"[ГРЕШКА] Проблем с достъп до сайта: {e}")
-        return ""
+    response = requests.get(URL, headers=HEADERS)
+    return response.text
 
 def parse_odds_drops(html):
     soup = BeautifulSoup(html, 'html.parser')
@@ -38,7 +48,7 @@ def parse_odds_drops(html):
     matches = []
 
     if table:
-        rows = table.find_all('tr')[1:]  # Пропускаме заглавния ред
+        rows = table.find_all('tr')[1:]
         for row in rows:
             cols = row.find_all('td')
             if len(cols) >= 7:
@@ -51,7 +61,7 @@ def parse_odds_drops(html):
                 drop_pct = cols[6].text.strip()
 
                 try:
-                    pct = float(drop_pct.replace('%', ''))
+                    pct = float(drop_pct.replace('%',''))
                 except:
                     pct = 0
 
@@ -78,28 +88,27 @@ def send_signals(signals):
         msg += f"\U0001F3C0 Мач: {match['teams']}\n"
         msg += f"\u23F0 Час: {match['time']}\n"
         msg += f"\u2193 Тип: {match['drop_type']}\n"
-        msg += f"\U0001F522 Спад: {match['odds_before']} ➜ {match['odds_after']} ({match['drop_pct']}%)"
+        msg += f"\U0001F522 Спад: {match['odds_before']} ➔ {match['odds_after']} ({match['drop_pct']}%)"
 
-        bot.send_message(CHAT_ID, msg, parse_mode='Markdown')
+        for chat_id in ALLOWED_CHAT_IDS:
+            bot.send_message(chat_id, msg, parse_mode='Markdown')
+
         last_sent.add(match['id'])
 
 def job():
     print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Сканирам за нови сигнали...")
     html = fetch_html()
-    if not html:
-        print("Не успях да заредя страницата.")
-        return
     signals = parse_odds_drops(html)
     if signals:
         send_signals(signals)
     else:
         print("Няма нови сигнали.")
 
-# Задача на всеки 5 минути
+# === Автоматично стартиране ===
 schedule.every(5).minutes.do(job)
 
 if __name__ == "__main__":
-    print("✅ Ботът е стартиран и работи...")
+    print("Ботът е стартиран и работи...")
     job()
     while True:
         schedule.run_pending()
