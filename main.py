@@ -18,6 +18,11 @@ def handle_ping(message):
     bot.reply_to(message, "✅ Alive and operational, шефе.")
 
 # Стартираме бота
+@bot.message_handler(func=lambda message: True)
+def handle_signal(message):
+    response = parse_signal(message.text)
+    bot.reply_to(message, response)
+
 if __name__ == "__main__":
     print("Ботът е стартиран...")
     bot.infinity_polling()
