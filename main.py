@@ -1,3 +1,5 @@
+from signal_parser import parse_signal
+
 import telebot
 import os
 
